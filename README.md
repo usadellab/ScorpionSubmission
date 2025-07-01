@@ -67,6 +67,82 @@ This combines both flags to submit historical data (without citations) to the Sc
 ```bash
 python scorpion_submission.py --date 2024-10 --live
 ```
+## Adding a New Service
+
+To collect and report metrics for a new service, you only need to add a new entry to the `SERVICES_CONFIG` list at the top of the `your_script_name.py` script.
+
+The script will automatically include any service defined in this list during its run.
+
+### Service Configuration Structure
+
+Each service is represented by a Python dictionary with four key-value pairs. You must provide the correct information for each key.
+
+Here is the template to copy and paste into the `SERVICES_CONFIG` list:
+
+```python
+{
+    "display_name": "Your Service's Common Name",
+    "matomo_label": " The Exact Page Title from Matomo",
+    "scorpion_service_name": "The Official Service Name in ScorPIoN",
+    "publications": [
+        "Full title of the first publication",
+        "Full title of the second publication"
+    ]
+}
+```
+**How to Find the Correct Values**
+
+* `display_name`: A simple, human-readable name for your service (e.g., `"My New Tool"`).
+
+* `matomo_label`: The exact "Page Title" as it appears in your Matomo instance.
+
+1. Log in to Matomo.
+
+2. Go to the "Actions" > "Page Titles" report.
+
+3. Find the entry for your service and copy the label exactly as it is written, including any leading or trailing spaces.
+
+* `scorpion_service_name`: The official `name` of the service registered in the ScorPIoN database. You can find this by logging into the ScorPIoN UI or by querying its API. This name must be an exact match for the script to find the correct service abbreviation.
+
+* `publications`: A list of the full, exact titles of the academic publications associated with your service. The script will search for each of these titles on Google Scholar to get citation counts.
+
+**Complete Example**
+
+Here is an example of adding a hypothetical service called "Bio-Analyzer":
+```python
+# In scorpion_submission.py
+
+SERVICES_CONFIG = [
+    {
+        "display_name": "Helixer",
+        "matomo_label": " Helixer structural gene annotation",
+        "scorpion_service_name": "Helixer",
+        "publications": [
+            "Helixer: cross-species gene annotation of large eukaryotic genomes using deep learning",
+            "Helixer-de novo Prediction of Primary Eukaryotic Gene Models Combining Deep Learning and a Hidden Markov Model"
+        ]
+    },
+    {
+        "display_name": "Mercator4",
+        "matomo_label": " Mercator4 - plant protein functional annotation",
+        "scorpion_service_name": "Mercator4 - Protein Function Mapping",
+        "publications": [
+            "Mercator: a fast and simple web server for genome scale functional annotation of plant sequence data"
+        ]
+    },
+    # --- ADD YOUR NEW SERVICE HERE ---
+    {
+        "display_name": "Bio-Analyzer",
+        "matomo_label": " Bio-Analyzer - Sequence Analysis Tool",
+        "scorpion_service_name": "Bio-Analyzer",
+        "publications": [
+            "The Bio-Analyzer Toolkit: a novel method for sequence interpretation"
+        ]
+    }
+    # ---------------------------------
+]
+```
+Once you have added the new dictionary to the list and saved the file, the script will automatically include "Bio-Analyzer" on its next run.
 
 ## Disclaimer
 
