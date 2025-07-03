@@ -1,44 +1,88 @@
 # ScorpionSubmission
-Using APIs to get KPIs from Matomo and Google Scholar and submit them to Scorpion (de.NBI)
 
-## Configuration and Requirements
+This script provides an automated Extract, Transform, Load (ETL) pipeline to gather Key Performance Indicators (KPIs) for various de.NBI / GHGA services and submit them to the ScorPIoN monitoring API.
+It is designed to be flexible, fetching data from multiple sources to provide a holistic view of service performance.
 
-This script relies on several external services to function. You must obtain your own API keys and set them as environment variables **before** running the script.
+# Features
 
-1.  **Matomo**
-    * You need a valid `token_auth` from your Matomo instance. Set it as the `MATOMO_AUTH_TOKEN` environment variable.
-    ```bash
-    export MATOMO_AUTH_TOKEN="your_matomo_token_here"
-    ```
+* **Multi-Source Data Aggregation**: Collects metrics from various APIs:
+   * **Matomo**: Fetches user engagement metrics and specific download counts.
+   * **Google Scholar**: Tracks academic impact by fetching publication citation counts.
+   * **GitHub API**: Measures software adaptation by countil downloads for software releases.
+* **Handles Different Service Types**: The script can process services with full web analytics, entire websites, or standalone tools that only have download and citation metrics.
+* **Configurable & Extensible**: Services are defined in a central `SERVICES_CONFIG` list, making it easy to add new services or modify existing ones.
+* **Flexible Execution**:
+   * Run the script for all services or specify a subset via the command line.
+   * Supports both "dry run" mode (prints the API commands without executing them) and "live" mode (submits data to ScorPIoN).
+   * Can backfill data for historical months.
+* **Secure**: All API keys and authentication tokens are loaded from environment variables.
 
-2.  **ScorPIoN API**
-    * You need a valid API key for the ScorPIoN instance you are submitting data to. Set it as the `SCORPION_API_KEY` environment variable.
-    ```bash
-    export SCORPION_API_KEY="your_scorpion_key_here"
-    ```
+# Understanding Service Categories
 
-3.  **SerpApi**
-    * This script uses the SerpApi service to gather publication citation counts from Google Scholar.
-    * You must register for an account (a free plan is available) at [serpapi.com](https://serpapi.com) to get your own API key. Set it as the `SERPAPI_KEY` environment variable.
-    ```bash
-    export SERPAPI_KEY="your_serpapi_key_here"
-    ```
+The script is designed to handle three distinct categories of services, each with a different data source for its primary metrics.
 
-# Analytics Exporter for ScorPIoN API
+**1. Web Applications (Page-Specific Analytics)**
 
-This script automates the process of collecting and reporting key performance indicators (KPIs) for research software services. It functions as an ETL (Extract, Transform, Load) pipeline:
+These are services that exist as specific pages or sections within a larger Matomo-tracked website. Their usage is measured by filtering Matomo analytics for a specific page title or label.
 
-* **Extract:** It fetches web analytics data (visits, actions, etc.) from a Matomo instance and retrieves live publication citation counts from Google Scholar (via the SerpApi service).
-* **Transform:** It processes this raw data into a standardized set of measurements.
-* **Load:** It submits the final measurements to a ScorPIoN reporting API instance.
+* **KPIs**: `Unique Users`, `Visits`, `Pageviews`, `Visit Duration`, `Citations`.
+* **Date Source**: Matomo (`Actions.getPageTitles`).
+* **Example Services**: Helixer, Mercator4.
+* **Script** `source_type`: `matomo_page_title`
 
-The script is designed to be secure and flexible, reading all secret keys from environment variables and providing command-line flags to control its behavior.
+**2. Full-Site Services (Site-Wide Analytics)**
 
-## Usage
+These are services that constitute an entire website. Instead of tracking a single page, the script gathers the overall analytics for the entire Matomo Site ID.
 
-The script defaults to a safe **dry run** mode, which prints the `curl` commands that would be used for submission without actually sending any data. To perform a live submission, you must explicitly use the `--live` flag.
+* **KPIs**: `Unique Users`, `Visits`, `Pageviews`, `Visit Duration`, `Citations`.
+* **Data Source**: Matomo (`VisitsSummary.get`).
+* **Example Services**: PlabiPD.
+* **Script** `source_type`:`matomo_site_summary`
 
-### Example Commands
+**3. Standalone Tools (API-driven KPIs)**
+
+These are typically downloadable tools where usage is not measured by web traffic but by other means. The script measures their impact through publication citations and download counts retrieved from an external API.
+
+* **KPIs**: `Downloads`, `Citations`.
+* **Data Source**: An external API for downloads (e.g., GitHub, a specific Matomo download link, etc).
+* **Example Services**: Trimmomatic (downloads from GitHub API), MapMan (downloads from a tracked Matomo URL).
+* **Script** `source_type`:`github_release_downloads`,`matomo_download`.
+
+# Setup
+
+**1. Requirements**
+
+The script is written in Python 3. You will need to install the following libraries. It is recommended to use a virtual environment.
+
+```bash
+pip install requests python-dateutil
+```
+
+**2. Environment Variables**
+
+This script requires several API tokens to function. Create a file named `.env` in the project root or export these variables into your shell environment. For cron jobs, creating a `.env` file and sourcing it via a wrapper script is the recommended approach.
+
+**Required:**
+
+* `SCORPION_API_KEY`: Your API key for the ScorPIoN service. *Note*: Make sure that you register your services in your ScorPIoN instance prior to submission of KPIs using this script!
+* `MATOMO_AUTH_TOKEN`: Your authentication token for the Matomo API.
+
+**Optional (but needed for certain KPIs):**
+
+* `SERPAPI_KEY`: An API key from https://serpapi.com/ to enable scraping of Google Scholar for citation counts.
+* `GITHUB_TOKEN`: A GitHub Personal Access Token. Recommended to avoid hitting the GitHub API's anonymous access rate limits.
+
+# Usage
+
+The script is controlled via command-line arguments.
+
+**Arguments**
+
+* `--date YYYY-MM`: (Optional) The month to fetch data for. **Defaults to the previous month.**
+* `--live`: (Optional) If present, the script will submit data to the ScorPIoN API. **If omitted, it runs in "dry run" mode.**
+* `services <name1> <name2> ... <nameN>`: (Optional) A space-separated list of service "display names" to process. **If omitted, the script processes all services. *Note* The "display names" need to be the same as given as "abbreviation" in the registration process of the service.**
+
+## Example Commands
 
 **1. Perform a Dry Run for Last Month (Default Behavior)**
 
@@ -67,6 +111,13 @@ This combines both flags to submit historical data (without citations) to the Sc
 ```bash
 python scorpion_submission.py --date 2024-10 --live
 ```
+
+**5. Historical Dry Run for a Single Service**
+
+```bash
+python scorpion_submission.py --date 2024-05 --services Helixer
+```
+
 ## Adding a New Service
 
 To collect and report metrics for a new service, you only need to add a new entry to the `SERVICES_CONFIG` list at the top of the `your_script_name.py` script.
@@ -75,74 +126,70 @@ The script will automatically include any service defined in this list during it
 
 ### Service Configuration Structure
 
-Each service is represented by a Python dictionary with four key-value pairs. You must provide the correct information for each key.
+Adding a new service is a straightforward process of updating the `SERVICES_CONFIG` list in the script.
 
-Here is the template to copy and paste into the `SERVICES_CONFIG` list:
+**Step 1:Determine the Service Category**
 
+First, decide which of the three categories your new service falls into (see "Understanding Service Categories" above). This will determine the `source_type` and `source_details` you need to provide.
+
+**Step 2: Update `SERVICES_CONFIG`**
+
+Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list using the appropriate template below.
+
+**Template for Web Application**
 ```python
 {
-    "display_name": "Your Service's Common Name",
-    "matomo_label": " The Exact Page Title from Matomo",
-    "scorpion_service_name": "The Official Service Name in ScorPIoN",
-    "publications": [
-        "Full title of the first publication",
-        "Full title of the second publication"
-    ]
-}
+    "display_name": "MyWebService",
+    "scorpion_service_name": "MyWebService - The Full Name in ScorPIoN",
+    "publications": ["Title of the primary publication"],
+    "source_type": "matomo_page_title",
+    "source_details": {"label": " Matomo Label for this Page"}
+},
 ```
-**How to Find the Correct Values**
 
-* `display_name`: A simple, human-readable name for your service (e.g., `"My New Tool"`).
-
-* `matomo_label`: The exact "Page Title" as it appears in your Matomo instance.
-
-1. Log in to Matomo.
-
-2. Go to the "Actions" > "Page Titles" report.
-
-3. Find the entry for your service and copy the label exactly as it is written, including any leading or trailing spaces.
-
-* `scorpion_service_name`: The official `name` of the service registered in the ScorPIoN database. You can find this by logging into the ScorPIoN UI or by querying its API. This name must be an exact match for the script to find the correct service abbreviation.
-
-* `publications`: A list of the full, exact titles of the academic publications associated with your service. The script will search for each of these titles on Google Scholar to get citation counts.
-
-**Complete Example**
-
-Here is an example of adding a hypothetical service called "Bio-Analyzer":
+**Template for Full-Site Service**
 ```python
-# In scorpion_submission.py
-
-SERVICES_CONFIG = [
-    {
-        "display_name": "Helixer",
-        "matomo_label": " Helixer structural gene annotation",
-        "scorpion_service_name": "Helixer",
-        "publications": [
-            "Helixer: cross-species gene annotation of large eukaryotic genomes using deep learning",
-            "Helixer-de novo Prediction of Primary Eukaryotic Gene Models Combining Deep Learning and a Hidden Markov Model"
-        ]
-    },
-    {
-        "display_name": "Mercator4",
-        "matomo_label": " Mercator4 - plant protein functional annotation",
-        "scorpion_service_name": "Mercator4 - Protein Function Mapping",
-        "publications": [
-            "Mercator: a fast and simple web server for genome scale functional annotation of plant sequence data"
-        ]
-    },
-    # --- ADD YOUR NEW SERVICE HERE ---
-    {
-        "display_name": "Bio-Analyzer",
-        "matomo_label": " Bio-Analyzer - Sequence Analysis Tool",
-        "scorpion_service_name": "Bio-Analyzer",
-        "publications": [
-            "The Bio-Analyzer Toolkit: a novel method for sequence interpretation"
-        ]
-    }
-    # ---------------------------------
-]
+{
+    "display_name": "MyWebsite",
+    "scorpion_service_name": "MyWebsite - The Full Name in ScorPIoN",
+    "publications": ["Title of the primary publication"],
+    "source_type": "matomo_site_summary",
+    "source_details": {}
+},
 ```
-Once you have added the new dictionary to the list and saved the file, the script will automatically include "Bio-Analyzer" on its next run.
+
+**Template for Standalone-Tool**
+*For GitHub downloads:*
+```python
+{
+    "display_name": "MyGitHubTool",
+    "scorpion_service_name": "MyGitHubTool - The Full Name in ScorPIoN",
+    "publications": ["Title of the primary publication"],
+    "source_type": "github_release_downloads",
+    "source_details": {
+        "repo": "owner/repository_name",
+        "tag": "v1.2.3"  # Optional: specify a tag to count downloads for one release only
+    }
+},
+```
+
+*For a specific download URL tracked in Matomo*
+```python
+{
+    "display_name": "MyGitHubTool",
+    "scorpion_service_name": "MyGitHubTool - The Full Name in ScorPIoN",
+    "publications": ["Title of the primary publication"],
+    "source_type": "github_release_downloads",
+    "source_details": {
+        "repo": "owner/repository_name",
+        "tag": "v1.2.3"  # Optional: specify a tag to count downloads for one release only
+    }
+},
+```
+
+**Step 3: Confirm the ScorPIoN Service Name**
+
+Ensure the value for `"scorpion_service_name"` is an **exact match** for the service's `name` field in the ScorPIoN API. An incorrect name will cause the script to skip the service.
 
 ## Disclaimer
 
