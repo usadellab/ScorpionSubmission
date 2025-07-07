@@ -176,14 +176,11 @@ Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list usi
 *For a specific download URL tracked in Matomo*
 ```python
 {
-    "display_name": "MyGitHubTool",
-    "scorpion_service_name": "MyGitHubTool - The Full Name in ScorPIoN",
+    "display_name": "MyDownloadedTool",
+    "scorpion_service_name": "MyDownloadedTool - The Full Name in ScorPIoN",
     "publications": ["Title of the primary publication"],
-    "source_type": "github_release_downloads",
-    "source_details": {
-        "repo": "owner/repository_name",
-        "tag": "v1.2.3"  # Optional: specify a tag to count downloads for one release only
-    }
+    "source_type": "matomo_download",
+    "source_details": {"download_url": "https://example.com/path/to/tool.zip"}
 },
 ```
 
