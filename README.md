@@ -1,4 +1,4 @@
-# ScorpionSubmission
+<div><img src="ScorpionSubmissionLogo.png" alt="ScorpionSubmission" width="300"></div>
 
 This script provides an automated Extract, Transform, Load (ETL) pipeline to gather Key Performance Indicators (KPIs) for various de.NBI / GHGA services and submit them to the ScorPIoN monitoring API.
 It is designed to be flexible, fetching data from multiple sources to provide a holistic view of service performance.
