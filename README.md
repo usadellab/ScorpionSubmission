@@ -168,7 +168,7 @@ Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list usi
     "source_type": "github_release_downloads",
     "source_details": {
         "repo": "owner/repository_name",
-        "tag": "v1.2.3"  # Optional: specify a tag to count downloads for one release only
+        "tags": ["v1.2.3", "v4.5.6"]  # Optional: specify tags to count downloads for specific releases only
     }
 },
 ```
