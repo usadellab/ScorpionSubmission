@@ -42,7 +42,7 @@ SERVICES_CONFIG = [
         "source_type": "github_release_downloads",
         "source_details": {
             "repo": "usadellab/Trimmomatic",
-            "tag": "v0.39"
+            "tags": ["v0.39", "v0.40"]
         }
     },
     {
@@ -112,10 +112,10 @@ def get_matomo_summary_data(report_date: str) -> dict | None:
     """Fetches overall site summary analytics using curl."""
     return _execute_matomo_curl("VisitsSummary.get", report_date)
 
-def get_github_release_downloads(repo: str, tag: str | None = None) -> int:
+def get_github_release_downloads(repo: str, tags: str | None = None) -> int:
     """
     Fetches download count from a GitHub repository.
-    If a tag is specified, it sums downloads for that release only.
+    If tags are specified, it sums downloads for these releases only.
     Otherwise, it sums downloads for all assets in all releases.
     """
     total_downloads = 0
@@ -130,19 +130,20 @@ def get_github_release_downloads(repo: str, tag: str | None = None) -> int:
         response.raise_for_status()
         releases = response.json()
 
-        if tag:
-            print(f"INFO: Searching for release with specific tag '{tag}'.")
-            found_release = False
+        if tags:
+            print(f"INFO: Searching for release with specific tags '{tags}'.")
+            tags_to_find = set(tags)
             for release in releases:
-                if release.get("tag_name") == tag:
-                    found_release = True
+                if release.get("tag_name") in tags_to_find:
+                    print(f"INFO: Found release with tag '{release.get('tag_name')}'. Summing asset downloads.")
                     for asset in release.get("assets", []):
                         total_downloads += asset.get("download_count", 0)
-                    break  # Stop searching once the tagged release is found and processed
-            if not found_release:
-                print(f"WARNING: Could not find a release with tag '{tag}' for repo '{repo}'.")
+                    tags_to_find.remove(release.get("tag_name"))
+             
+            if tags_to_find:
+                print(f"WARNING: Could not find releases for tags: {list(tags_to_find)} in repo '{repo}'.")
         else:
-            print(f"INFO: No specific tag provided. Summing downloads for all releases.")
+            print(f"INFO: No specific tags provided. Summing downloads for all releases.")
             for release in releases:
                 for asset in release.get("assets", []):
                     total_downloads += asset.get("download_count", 0)
@@ -279,8 +280,8 @@ def main(user_date: str, is_live_run: bool, selected_services: list | None):
         elif source_type == 'github_release_downloads':
             if not is_historical_mode:
                 repo = source_details['repo']
-                tag = source_details.get('tag')  # Safely get the tag, will be None if not present
-                intermediate_metrics['Downloads'] = get_github_release_downloads(repo, tag)
+                tags = source_details.get('tags')  # Safely get the tag, will be None if not present
+                intermediate_metrics['Downloads'] = get_github_release_downloads(repo, tags)
             else:
                 print("INFO: Skipping GitHub downloads fetch in historical mode.")
 
