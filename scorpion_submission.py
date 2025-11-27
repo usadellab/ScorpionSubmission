@@ -24,7 +24,7 @@ SERVICES_CONFIG = [
     {
         "display_name": "Helixer",
         "scorpion_service_name": "Helixer",
-        "publications": ["Helixer: cross-species gene annotation of large eukaryotic genomes using deep learning", "Helixer-de novo Prediction of Primary Eukaryotic Gene Models Combining Deep Learning and a Hidden Markov Model"],
+        "publications": ["Helixer: cross-species gene annotation of large eukaryotic genomes using deep learning", "Helixer-de novo Prediction of Primary Eukaryotic Gene Models Combining Deep Learning and a Hidden Markov Model", "Helixer: ab initio prediction of primary eukaryotic gene models combining deep learning and a hidden Markov model"],
         "source_type": "matomo_page_title",
         "source_details": {"label": " Helixer structural gene annotation"}
     },
