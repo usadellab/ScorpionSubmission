@@ -9,6 +9,8 @@ from urllib.parse import quote
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 
+__version__ = "1.0.1"
+
 # --- Secure Configuration Loading ---
 # Tokens are read from environment variables for security.
 SCORPION_API_URL = "https://scorpion.bi.denbi.de"
@@ -26,14 +28,21 @@ SERVICES_CONFIG = [
         "scorpion_service_name": "Helixer",
         "publications": ["Helixer: cross-species gene annotation of large eukaryotic genomes using deep learning", "Helixer-de novo Prediction of Primary Eukaryotic Gene Models Combining Deep Learning and a Hidden Markov Model", "Helixer: ab initio prediction of primary eukaryotic gene models combining deep learning and a hidden Markov model"],
         "source_type": "matomo_page_title",
-        "source_details": {"label": " Helixer structural gene annotation"}
+        "source_details": {"label": " Helixer structural gene annotation"},
+        "executions_local_sources": [
+            {"path": "/path/to/helixer/executions", "type": "file", "pattern": ".zip"}
+        ]
     },
     {
         "display_name": "Mercator4",
         "scorpion_service_name": "Mercator4 - Protein Function Mapping",
         "publications": ["Mercator: a fast and simple web server for genome scale functional annotation of plant sequence data"],
         "source_type": "matomo_page_title",
-        "source_details": {"label": " Mercator4 - plant protein functional annotation"}
+        "source_details": {"label": " Mercator4 - plant protein functional annotation"},
+        "executions_local_sources": [
+            {"path": "/path/to/mercator4/executions/dirs", "type": "directory", "pattern": ""},
+            {"path": "/path/to/mercator4/executions/files", "type": "file", "pattern": "_fasta.zip"}
+        ]
     },
     {
         "display_name": "Trimmomatic",
@@ -77,7 +86,8 @@ MATOMO_SUMMARY_TO_INTERMEDIATE = {
 INTERMEDIATE_NAME_TO_SCORPION_KPI = {
     'Visits Duration': 'Visit Duration', 'Actions': 'Actions',
     'Actions per Visit': 'Actions per Visit', 'Visitors': 'Unique Users',
-    'Visits': 'Visits', 'Citations': 'Citations', 'Downloads': 'Downloads'
+    'Visits': 'Visits', 'Citations': 'Citations', 'Downloads': 'Downloads',
+    'Executions': 'Executions'
 }
 
 def _execute_matomo_curl(api_method: str, report_date: str, extra_params_str: str = "") -> dict | None:
@@ -153,6 +163,57 @@ def get_github_release_downloads(repo: str, tags: str | None = None) -> int:
     except requests.RequestException as e:
         print(f"ERROR during GitHub fetch for {repo}: {e}")
         return 0
+
+def get_local_executions_count(sources: list, report_date: str) -> int:
+    """
+    Counts the number of files or directories in local directories that were modified within a specific month.
+    """
+    try:
+        start_dt = datetime.strptime(report_date, '%Y-%m').replace(tzinfo=timezone.utc)
+        end_dt = start_dt + relativedelta(months=1)
+        start_ts = start_dt.timestamp()
+        end_ts = end_dt.timestamp()
+        print(f"INFO: Local execution time range filter: {start_dt.strftime('%Y-%m-%d %H:%M:%S')} to {end_dt.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    except ValueError:
+        return 0
+
+    total_count = 0
+    
+    for source in sources:
+        directory_path = source.get("path")
+        entry_type = source.get("type", "file")
+        pattern = source.get("pattern", "")
+        
+        if not directory_path or not os.path.isdir(directory_path):
+            print(f"WARNING: Executions directory not found or is not a directory: {directory_path}")
+            continue
+            
+        source_count = 0
+        total_scanned = 0
+        matched_type = 0
+        matched_pattern = 0
+        
+        print(f"INFO: Scanning '{directory_path}' (type={entry_type}, pattern='{pattern}')")
+        
+        try:
+            with os.scandir(directory_path) as entries:
+                for entry in entries:
+                    total_scanned += 1
+                    is_match = (entry_type == "file" and entry.is_file()) or (entry_type == "directory" and entry.is_dir())
+                    if is_match:
+                        matched_type += 1
+                        if entry.name.endswith(pattern):
+                            matched_pattern += 1
+                            if start_ts <= entry.stat().st_mtime < end_ts:
+                                source_count += 1
+                                    
+            print(f"INFO:   -> Scanned {total_scanned} items, {matched_type} matched type, {matched_pattern} matched pattern.")
+            print(f"INFO:   -> {source_count} matches fell within the time range.")
+            total_count += source_count
+        except Exception as e:
+            print(f"ERROR reading executions directory {directory_path}: {e}")
+            
+    return total_count
 
 def get_scholar_citations(publication_titles: list) -> int:
     """Scrapes Google Scholar for citation counts for a list of publications."""
@@ -289,6 +350,12 @@ def main(user_date: str, is_live_run: bool, selected_services: list | None):
         if not is_historical_mode and "publications" in service_info and service_info["publications"]:
             intermediate_metrics['Citations'] = get_scholar_citations(service_info["publications"])
 
+        # Step 2.5: Add optional Executions KPI
+        if "executions" in service_info:
+            intermediate_metrics['Executions'] = service_info["executions"]
+        elif "executions_local_sources" in service_info:
+            intermediate_metrics['Executions'] = get_local_executions_count(service_info["executions_local_sources"], user_date)
+
         # Step 3: Map intermediate metrics to ScorPIoN payload
         measurements_payload = []
         for intermediate_name, value in intermediate_metrics.items():
@@ -313,16 +380,17 @@ def check_env_vars():
         sys.exit(1)
 
 if __name__ == "__main__":
-    check_env_vars()
-    
     parser = argparse.ArgumentParser(description="Fetch service KPIs and submit them to the ScorPIoN API.")
     default_date = (datetime.now(timezone.utc) - relativedelta(months=1)).strftime('%Y-%m')
     
     parser.add_argument("--date", type=str, default=default_date, help=f"The date for the report in YYYY-MM format. Defaults to last month ({default_date}).")
     parser.add_argument("--live", action='store_true', help="Run in live submission mode. If not set, the script will perform a dry run and print curl commands.")
     parser.add_argument("--services", nargs='*', help="Specify one or more services to run by their display_name (e.g., 'Helixer' 'Trimmomatic'). If not provided, all services will be processed.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     
     args = parser.parse_args()
+    
+    check_env_vars()
     
     try:
         datetime.strptime(args.date, '%Y-%m')

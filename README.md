@@ -5,10 +5,11 @@ It is designed to be flexible, fetching data from multiple sources to provide a 
 
 # Features
 
-* **Multi-Source Data Aggregation**: Collects metrics from various APIs:
+* **Multi-Source Data Aggregation**: Collects metrics from various APIs and local files:
    * **Matomo**: Fetches user engagement metrics and specific download counts.
    * **Google Scholar**: Tracks academic impact by fetching publication citation counts.
    * **GitHub API**: Measures software adaptation by countil downloads for software releases.
+   * **Local Filesystem**: Scans specified local directories to count tool executions (e.g., matching specific file extensions or directories) within the reporting month.
 * **Handles Different Service Types**: The script can process services with full web analytics, entire websites, or standalone tools that only have download and citation metrics.
 * **Configurable & Extensible**: Services are defined in a central `SERVICES_CONFIG` list, making it easy to add new services or modify existing ones.
 * **Flexible Execution**:
@@ -47,6 +48,10 @@ These are typically downloadable tools where usage is not measured by web traffi
 * **Data Source**: An external API for downloads (e.g., GitHub, a specific Matomo download link, etc).
 * **Example Services**: Trimmomatic (downloads from GitHub API), MapMan (downloads from a tracked Matomo URL).
 * **Script** `source_type`:`github_release_downloads`,`matomo_download`.
+
+**4. Optional KPIs (Executions)**
+
+Any of the above service categories can additionally report an `Executions` KPI. This is useful for backend tools that generate output files or directories on a local server. The script can scan configured absolute paths to count these matching files/directories modified during the reporting month.
 
 # Setup
 
@@ -187,6 +192,23 @@ Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list usi
 **Step 3: Confirm the ScorPIoN Service Name**
 
 Ensure the value for `"scorpion_service_name"` is an **exact match** for the service's `name` field in the ScorPIoN API. An incorrect name will cause the script to skip the service.
+
+**Step 4: Adding Local Executions (Optional)**
+
+If your service generates local files or directories per execution, you can configure the script to count them and submit them as an `Executions` KPI. Add the `executions_local_sources` list to your service configuration:
+
+```python
+{
+    # ... other service configurations ...
+    "executions_local_sources": [
+        {"path": "/absolute/path/to/jobs", "type": "directory", "pattern": ""},
+        {"path": "/absolute/path/to/outputs", "type": "file", "pattern": ".zip"}
+    ]
+}
+```
+* `path`: The absolute path to the directory containing execution outputs.
+* `type`: Either `"file"` or `"directory"`.
+* `pattern`: A string the file/directory name must end with (e.g., `".zip"`, `"_fasta.zip"`). Leave empty (`""`) to match all.
 
 ## Disclaimer
 
