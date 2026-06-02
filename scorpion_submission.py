@@ -35,7 +35,7 @@ SERVICES_CONFIG = [
         "source_type": "matomo_page_title",
         "source_details": {"label": " Helixer structural gene annotation"},
         "executions_local_sources": [
-            {"path": "/path/to/helixer/executions", "type": "file", "pattern": ".zip"}
+            {"path": "/mnt/webdata/plabipd/projects/Helixer/download", "type": "file", "pattern": ".zip"}
         ]
     },
     {
@@ -45,14 +45,14 @@ SERVICES_CONFIG = [
         "source_type": "matomo_page_title",
         "source_details": {"label": " Mercator4 - plant protein functional annotation"},
         "executions_local_sources": [
-            {"path": "/path/to/mercator4/executions/dirs", "type": "directory", "pattern": ""},
-            {"path": "/path/to/mercator4/executions/files", "type": "file", "pattern": "_fasta.zip"}
+            {"path": "/mnt/webdata/plabipd/projects/MercatorLegacy/work", "type": "directory", "pattern": ""},
+            {"path": "/mnt/webdata/plabipd/projects/Mercator/download", "type": "file", "pattern": "_fasta.zip"}
         ]
     },
     {
         "display_name": "Trimmomatic",
         "scorpion_service_name": "Trimmomatic - NGS Read Trimmer",  # Corrected name
-        "publications": ["Trimmomatic: a flexible trimmer for Illumina sequence data"],
+        "publications": ["Trimmomatic: a flexible trimmer for Illumina sequence data", "Trimmomatic: A decade of feature-rich, high-performance NGS read preprocessing"],
         "source_type": "github_release_downloads",
         "source_details": {
             "repo": "usadellab/Trimmomatic",
