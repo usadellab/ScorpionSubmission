@@ -9,7 +9,7 @@ from urllib.parse import quote
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 # --- Secure Configuration Loading ---
 # Tokens are read from environment variables for security.
@@ -19,6 +19,11 @@ MATOMO_AUTH_TOKEN = os.getenv("MATOMO_AUTH_TOKEN")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") # Optional, for higher API rate limits
 SITE_ID = '1'
+MATOMO_BASE_URL = "https://www.plabipd.de/analytics/"
+# Override DNS resolution for Matomo requests (e.g. after a server migration where DNS not yet updated).
+# Format: "hostname:port:ip"  — maps directly to curl's --resolve flag.
+# Set to None to disable and use normal DNS.
+MATOMO_RESOLVE = None  # e.g. "www.plabipd.de:443:10.100.50.34"
 
 # --- DEFINITIVE SERVICE CONFIGURATION ---
 # The 'scorpion_service_name' values have been updated to exactly match the names in the ScorPIoN API.
@@ -92,9 +97,10 @@ INTERMEDIATE_NAME_TO_SCORPION_KPI = {
 
 def _execute_matomo_curl(api_method: str, report_date: str, extra_params_str: str = "") -> dict | None:
     """Generic function to execute a Matomo API curl command."""
-    url = (f"'https://www.plabipd.de/analytics/?module=API&method={api_method}"
-           f"&idSite={SITE_ID}&period=month&date={report_date}&format=JSON{extra_params_str}'")
-    command = f"curl -s -X POST {url} -d 'token_auth={MATOMO_AUTH_TOKEN}'"
+    url = (f"{MATOMO_BASE_URL}?module=API&method={api_method}"
+           f"&idSite={SITE_ID}&period=month&date={report_date}&format=JSON{extra_params_str}")
+    resolve_flag = f"--resolve {MATOMO_RESOLVE} " if MATOMO_RESOLVE else ""
+    command = f'curl -s {resolve_flag}-X POST "{url}" -d "token_auth={MATOMO_AUTH_TOKEN}"'
     print(f"INFO: Executing curl for Matomo method: '{api_method}' for date {report_date}")
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
