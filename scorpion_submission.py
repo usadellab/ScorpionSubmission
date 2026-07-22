@@ -56,7 +56,7 @@ SERVICES_CONFIG = [
         "source_type": "github_release_downloads",
         "source_details": {
             "repo": "usadellab/Trimmomatic",
-            "tags": ["v0.39", "v0.40"]
+            "tags": ["v0.39", "v0.40", "v0.41"]
         }
     },
     {
