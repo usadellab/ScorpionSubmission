@@ -146,7 +146,9 @@ Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list usi
 {
     "display_name": "MyWebService",
     "scorpion_service_name": "MyWebService - The Full Name in ScorPIoN",
-    "publications": ["Title of the primary publication"],
+    "publications": [
+        {"title": "Title of the primary publication", "author_id": "...", "citation_id": "..."}
+    ],
     "source_type": "matomo_page_title",
     "source_details": {"label": " Matomo Label for this Page"}
 },
@@ -157,7 +159,9 @@ Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list usi
 {
     "display_name": "MyWebsite",
     "scorpion_service_name": "MyWebsite - The Full Name in ScorPIoN",
-    "publications": ["Title of the primary publication"],
+    "publications": [
+        {"title": "Title of the primary publication", "author_id": "...", "citation_id": "..."}
+    ],
     "source_type": "matomo_site_summary",
     "source_details": {}
 },
@@ -169,7 +173,9 @@ Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list usi
 {
     "display_name": "MyGitHubTool",
     "scorpion_service_name": "MyGitHubTool - The Full Name in ScorPIoN",
-    "publications": ["Title of the primary publication"],
+    "publications": [
+        {"title": "Title of the primary publication", "author_id": "...", "citation_id": "..."}
+    ],
     "source_type": "github_release_downloads",
     "source_details": {
         "repo": "owner/repository_name",
@@ -183,11 +189,59 @@ Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list usi
 {
     "display_name": "MyDownloadedTool",
     "scorpion_service_name": "MyDownloadedTool - The Full Name in ScorPIoN",
-    "publications": ["Title of the primary publication"],
+    "publications": [
+        {"title": "Title of the primary publication", "author_id": "...", "citation_id": "..."}
+    ],
     "source_type": "matomo_download",
     "source_details": {"download_url": "https://example.com/path/to/tool.zip"}
 },
 ```
+
+A publication with no `author_id`/`citation_id` set is skipped for citation counting (a warning is printed), so a service can be added before its citation IDs are resolved.
+
+**Step 2.5: Resolving `author_id` and `citation_id`**
+
+Think of a Google Scholar author profile as that person's personal list of their papers.
+
+* `author_id`: identifies the profile itself, i.e. which person's list. It is the `user=` value in a profile URL, e.g. `https://scholar.google.com/citations?user=RjKYuDIAAAAJ` has `author_id` `RjKYuDIAAAAJ`.
+* `citation_id`: identifies one paper's position on that specific list. It is not an ID of the paper itself, so the same paper looked up via a different co-author's profile would have a different `citation_id`. Format is `<author_id>:<paper_hash>`, e.g. `RjKYuDIAAAAJ:g5m5HwL7SMYC`.
+
+Both are needed together because the only reliable citation-count source found (`view_citation`, see below) requires "which list" and "which entry on that list".
+
+Google Scholar has no official API and its free-text search is not reliable enough to identify a specific paper automatically: search ranking can return an unrelated paper as the top hit, and for heavily-cited papers Scholar's own index splits the citation graph across many duplicate entries. A paper's listing on its own author's profile page does not have this problem.
+
+**How to find them, step by step (worked example: the Mercator publication)**
+
+1. Search the web (a normal web search, not Google Scholar itself, so it isn't affected by Scholar's bot detection) for `"<Author Name>" google scholar profile`, using one of the publication's authors. For Mercator's author Björn Usadel, this finds `https://scholar.google.com/citations?user=RjKYuDIAAAAJ`. The `author_id` is `RjKYuDIAAAAJ`.
+
+2. Fetch that author's publication list from SerpApi:
+   ```
+   https://serpapi.com/search.json?engine=google_scholar_author&author_id=RjKYuDIAAAAJ&api_key=<SERPAPI_KEY>
+   ```
+   The response has an `articles` list. If the author has more than 100 publications, repeat with `&start=100`, `&start=200`, etc. to page through all of them.
+
+3. Find the target paper in `articles` by matching its title, and read its `citation_id` field:
+   ```json
+   {
+     "title": "Mercator: a fast and simple web server for genome scale functional annotation of plant sequence data",
+     "citation_id": "RjKYuDIAAAAJ:g5m5HwL7SMYC",
+     ...
+   }
+   ```
+
+4. Add both values to the publication entry in `SERVICES_CONFIG`:
+   ```python
+   {"title": "Mercator: a fast and simple web server for genome scale functional annotation of plant sequence data",
+    "author_id": "RjKYuDIAAAAJ", "citation_id": "RjKYuDIAAAAJ:g5m5HwL7SMYC"}
+   ```
+
+5. Optional sanity check: query the identifiers directly and confirm the returned title matches the paper before trusting the count:
+   ```
+   https://serpapi.com/search.json?engine=google_scholar_author&view_op=view_citation&author_id=RjKYuDIAAAAJ&citation_id=RjKYuDIAAAAJ:g5m5HwL7SMYC&api_key=<SERPAPI_KEY>
+   ```
+   The response's `citation.title` should match, and `citation.total_citations.cited_by.total` is the count `get_scholar_citations()` will use.
+
+If none of the paper's authors have a Google Scholar profile, citation tracking for that publication is not possible through this script.
 
 **Step 3: Confirm the ScorPIoN Service Name**
 

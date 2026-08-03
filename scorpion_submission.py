@@ -26,7 +26,23 @@ SERVICES_CONFIG = [
     {
         "display_name": "Helixer",
         "scorpion_service_name": "Helixer",
-        "publications": ["Helixer: cross-species gene annotation of large eukaryotic genomes using deep learning", "Helixer-de novo Prediction of Primary Eukaryotic Gene Models Combining Deep Learning and a Hidden Markov Model", "Helixer: ab initio prediction of primary eukaryotic gene models combining deep learning and a hidden Markov model"],
+        "publications": [
+            {
+                "title": "Helixer: cross-species gene annotation of large eukaryotic genomes using deep learning",
+                "author_id": "fGsO4gYAAAAJ",
+                "citation_id": "fGsO4gYAAAAJ:kkE12xK_jI8C"
+            },
+            {
+                "title": "Helixer-de novo Prediction of Primary Eukaryotic Gene Models Combining Deep Learning and a Hidden Markov Model",
+                "author_id": "RjKYuDIAAAAJ",
+                "citation_id": "RjKYuDIAAAAJ:q3CdL3IzO_QC"
+            },
+            {
+                "title": "Helixer: ab initio prediction of primary eukaryotic gene models combining deep learning and a hidden Markov model",
+                "author_id": "RjKYuDIAAAAJ",
+                "citation_id": "RjKYuDIAAAAJ:-FonjvnnhkoC"
+            }
+        ],
         "source_type": "matomo_page_title",
         "source_details": {"label": " Helixer structural gene annotation"},
         "executions_local_sources": [
@@ -36,7 +52,13 @@ SERVICES_CONFIG = [
     {
         "display_name": "Mercator4",
         "scorpion_service_name": "Mercator4 - Protein Function Mapping",
-        "publications": ["Mercator: a fast and simple web server for genome scale functional annotation of plant sequence data"],
+        "publications": [
+            {
+                "title": "Mercator: a fast and simple web server for genome scale functional annotation of plant sequence data",
+                "author_id": "RjKYuDIAAAAJ",
+                "citation_id": "RjKYuDIAAAAJ:g5m5HwL7SMYC"
+            }
+        ],
         "source_type": "matomo_page_title",
         "source_details": {"label": " Mercator4 - plant protein functional annotation"},
         "executions_local_sources": [
@@ -47,7 +69,18 @@ SERVICES_CONFIG = [
     {
         "display_name": "Trimmomatic",
         "scorpion_service_name": "Trimmomatic - NGS Read Trimmer",  # Corrected name
-        "publications": ["Trimmomatic: a flexible trimmer for Illumina sequence data"],
+        "publications": [
+            {
+                "title": "Trimmomatic: a flexible trimmer for Illumina sequence data",
+                "author_id": "RjKYuDIAAAAJ",
+                "citation_id": "RjKYuDIAAAAJ:SeFeTyx0c_EC"
+            },
+            {
+                "title": "Trimmomatic: a decade of feature-rich, high-performance NGS read preprocessing",
+                "author_id": "RjKYuDIAAAAJ",
+                "citation_id": "RjKYuDIAAAAJ:hCrLmN-GePgC"
+            }
+        ],
         "source_type": "github_release_downloads",
         "source_details": {
             "repo": "usadellab/Trimmomatic",
@@ -57,14 +90,26 @@ SERVICES_CONFIG = [
     {
         "display_name": "MapMan",
         "scorpion_service_name": "MapMan - Map Gene / Protein / Metabolite Data on biological Pathways",  # Corrected name
-        "publications": ["A guide to using MapMan to visualize and compare Omics data in plants: a case study in the crop species, Maize"],
+        "publications": [
+            {
+                "title": "A guide to using MapMan to visualize and compare Omics data in plants: a case study in the crop species, Maize",
+                "author_id": "RjKYuDIAAAAJ",
+                "citation_id": "RjKYuDIAAAAJ:kNdYIx-mwKoC"
+            }
+        ],
         "source_type": "matomo_download",
         "source_details": {"download_url": "https://www.plabipd.de/data/MapMan-3.7.1-jar-with-dependencies.jar"}
     },
     {
         "display_name": "PlabiPD",
         "scorpion_service_name": "PlabiPD - Functional annotation of plant genomes",  # Corrected name
-        "publications": ["PubPlant – a continuously updated online resource for sequenced and published plant genomes"],
+        "publications": [
+            {
+                "title": "PubPlant – a continuously updated online resource for sequenced and published plant genomes",
+                "author_id": "RjKYuDIAAAAJ",
+                "citation_id": "RjKYuDIAAAAJ:LI9QrySNdTsC"
+            }
+        ],
         "source_type": "matomo_site_summary",
         "source_details": {}
     }
@@ -215,19 +260,47 @@ def get_local_executions_count(sources: list, report_date: str) -> int:
             
     return total_count
 
-def get_scholar_citations(publication_titles: list) -> int:
-    """Scrapes Google Scholar for citation counts for a list of publications."""
+def get_scholar_citations(publications: list) -> int:
+    """
+    Fetches citation counts for a list of publications via SerpApi's Google Scholar
+    author engine. Each publication must provide "author_id" and "citation_id" -
+    the pinned identifiers of the paper on one of its authors' Scholar profiles.
+    See README.md ("Resolving author_id and citation_id") for how these are obtained.
+
+    Free-text title search against Google Scholar is not used here: search ranking is
+    non-deterministic and can return an unrelated paper as the top hit, and for
+    heavily-cited papers Scholar's own index fragments the citation graph across many
+    duplicate entries with no reliable way to pick the canonical one from a text query.
+    Querying "cites=<cluster_id>" directly is also not used: its total_results count
+    does not match the paper's actual citation count (verified to undercount by 5-10x).
+    The author-profile "view_citation" record is the only field found to return the
+    correct, stable count.
+    """
     if not SERPAPI_KEY: return 0
     total_citations = 0
-    for title in publication_titles:
+    for pub in publications:
+        title = pub.get("title", "")
+        author_id = pub.get("author_id")
+        citation_id = pub.get("citation_id")
+        if not author_id or not citation_id:
+            print(f"WARNING: No author_id/citation_id for '{title[:50]}...'. Skipping citation count.")
+            continue
         print(f"INFO: Querying SerpApi for citations of: '{title[:40]}...'")
-        params = {"engine": "google_scholar", "q": title, "api_key": SERPAPI_KEY}
+        params = {
+            "engine": "google_scholar_author",
+            "view_op": "view_citation",
+            "author_id": author_id,
+            "citation_id": citation_id,
+            "api_key": SERPAPI_KEY,
+        }
         try:
             response = requests.get("https://serpapi.com/search.json", params=params)
             response.raise_for_status()
             data = response.json()
-            total_citations += data.get("organic_results", [{}])[0].get("inline_links", {}).get("cited_by", {}).get("total", 0)
-        except Exception: continue
+            total_citations += data.get("citation", {}).get("total_citations", {}).get("cited_by", {}).get("total", 0)
+        except Exception as e:
+            print(f"ERROR: Could not fetch citations for '{title[:40]}...': {e}")
+            continue
     return total_citations
 
 def get_service_abbreviations() -> dict:
