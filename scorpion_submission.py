@@ -115,8 +115,20 @@ SERVICES_CONFIG = [
                 "citation_id": "RjKYuDIAAAAJ:LI9QrySNdTsC"
             }
         ],
-        "source_type": "matomo_site_summary",
-        "source_details": {}
+        "source_type": "matomo_page_url_list",
+        "source_details": {
+            "url_paths": [
+                "/pubplant_main.html",
+                "/pubplant_cladogram1.html",
+                "/pubplant_cladogram2.html",
+                "/pubplant_overview.html",
+                "/pubplant_timeline.html",
+                "/pubplant_timeline1.html",
+                "/plant_genomes_pa.ep",
+                "/plant_genomes_pn.ep",
+                "/timeline_view.ep"
+            ]
+        }
     }
 ]
 
@@ -140,7 +152,7 @@ INTERMEDIATE_NAME_TO_SCORPION_KPI = {
     'Executions': 'Executions'
 }
 
-def _execute_matomo_curl(api_method: str, report_date: str, extra_params_str: str = "") -> dict | None:
+def _execute_matomo_curl(api_method: str, report_date: str, extra_params_str: str = "", as_list: bool = False):
     """Generic function to execute a Matomo API curl command."""
     url = (f"{MATOMO_BASE_URL}?module=API&method={api_method}"
            f"&idSite={SITE_ID}&period=month&date={report_date}&format=JSON{extra_params_str}")
@@ -151,13 +163,15 @@ def _execute_matomo_curl(api_method: str, report_date: str, extra_params_str: st
         result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
         if not result.stdout:
             print(f"WARNING: Matomo API returned empty response for method {api_method}")
-            return None
+            return [] if as_list else None
         data = json.loads(result.stdout)
+        if as_list:
+            return data if isinstance(data, list) else []
         # Handle cases where Matomo returns a list (e.g., for page titles) vs. a direct dictionary (e.g., for summaries)
         return data[0] if isinstance(data, list) and data else data
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         print(f"ERROR during Matomo fetch for {api_method}: {e}")
-        return None
+        return [] if as_list else None
 
 def get_matomo_page_title_data(label: str, report_date: str) -> dict | None:
     """Fetches analytics data for a specific page title using curl."""
@@ -172,6 +186,48 @@ def get_matomo_download_data(download_url: str, report_date: str) -> dict | None
 def get_matomo_summary_data(report_date: str) -> dict | None:
     """Fetches overall site summary analytics using curl."""
     return _execute_matomo_curl("VisitsSummary.get", report_date)
+
+def get_matomo_page_url_list_data(url_paths: list, report_date: str) -> dict | None:
+    """
+    Fetches Actions.getPageUrls (flattened) and sums metrics across a fixed list of
+    page paths. Used for services whose usage spans several page URLs that do not
+    share a common folder or filename pattern Matomo could group by (e.g. PubPlant's
+    pages use unrelated legacy names like plant_genomes_pa.ep alongside pubplant_*.html),
+    so the pages have to be enumerated explicitly rather than matched by prefix.
+    """
+    rows = _execute_matomo_curl("Actions.getPageUrls", report_date, extra_params_str="&flat=1", as_list=True)
+    if not rows:
+        return None
+    wanted = set(url_paths)
+
+    def row_path(row: dict) -> str:
+        # Matomo's flat page-URL report has been observed to return either the bare
+        # path or the full URL including domain, depending on instance/version.
+        url = row.get("url") or ""
+        for path in wanted:
+            if url == path or url.endswith(path):
+                return path
+        return f"/{row.get('label', '')}"
+
+    matches = [r for r in rows if row_path(r) in wanted]
+    if not matches:
+        print(f"WARNING: None of the configured page URLs were found in Matomo's report for {report_date}: {url_paths}")
+        return None
+    found_paths = {row_path(r) for r in matches}
+    missing = wanted - found_paths
+    if missing:
+        print(f"WARNING: {len(missing)} configured page URL(s) had no data for {report_date}: {sorted(missing)}")
+    total_hits = sum(r.get("nb_hits", 0) for r in matches)
+    total_visits = sum(r.get("nb_visits", 0) for r in matches)
+    total_uniq = sum(r.get("sum_daily_nb_uniq_visitors", 0) for r in matches)
+    weighted_time = sum(r.get("avg_time_on_page", 0) * r.get("nb_visits", 0) for r in matches)
+    print(f"INFO:   -> matched {len(matches)}/{len(url_paths)} configured page URLs.")
+    return {
+        "nb_hits": total_hits,
+        "nb_visits": total_visits,
+        "sum_daily_nb_uniq_visitors": total_uniq,
+        "avg_time_on_page": (weighted_time / total_visits) if total_visits else 0,
+    }
 
 def get_github_release_downloads(repo: str, tags: str | None = None) -> int:
     """
@@ -412,6 +468,13 @@ def main(user_date: str, is_live_run: bool, selected_services: list | None):
                 for api_key, im_name in MATOMO_SUMMARY_TO_INTERMEDIATE.items():
                     intermediate_metrics[im_name] = raw_data.get(api_key, 0)
         
+        elif source_type == 'matomo_page_url_list':
+            raw_data = get_matomo_page_url_list_data(source_details['url_paths'], matomo_report_date)
+            if raw_data:
+                for api_key, im_name in MATOMO_PAGE_TITLE_TO_INTERMEDIATE.items():
+                    value = raw_data.get(api_key, 0) if api_key != 'nb_actions_per_visit' else (raw_data.get('nb_hits', 0) / raw_data.get('nb_visits', 1) if raw_data.get('nb_visits') else 0)
+                    intermediate_metrics[im_name] = value
+
         elif source_type == 'matomo_download':
             raw_data = get_matomo_download_data(source_details['download_url'], matomo_report_date)
             if raw_data:

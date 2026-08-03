@@ -20,7 +20,7 @@ It is designed to be flexible, fetching data from multiple sources to provide a 
 
 # Understanding Service Categories
 
-The script is designed to handle three distinct categories of services, each with a different data source for its primary metrics.
+The script is designed to handle four distinct categories of services, each with a different data source for its primary metrics.
 
 **1. Web Applications (Page-Specific Analytics)**
 
@@ -31,16 +31,24 @@ These are services that exist as specific pages or sections within a larger Mato
 * **Example Services**: Helixer, Mercator4.
 * **Script** `source_type`: `matomo_page_title`
 
-**2. Full-Site Services (Site-Wide Analytics)**
+**2. Multi-Page Services (Explicit URL List)**
+
+These are services whose usage spans several distinct page URLs that do not share a common Matomo page title, folder, or filename pattern the script could group by automatically. The pages are listed explicitly in the config and their metrics are summed.
+
+* **KPIs**: `Unique Users`, `Visits`, `Pageviews`, `Visit Duration`, `Citations`.
+* **Data Source**: Matomo (`Actions.getPageUrls`, flattened).
+* **Example Services**: PlabiPD (PubPlant's pages use unrelated legacy names such as `pubplant_main.html` and `plant_genomes_pa.ep`, so they cannot be matched by a single title or prefix).
+* **Script** `source_type`: `matomo_page_url_list`
+
+**3. Full-Site Services (Site-Wide Analytics)**
 
 These are services that constitute an entire website. Instead of tracking a single page, the script gathers the overall analytics for the entire Matomo Site ID.
 
 * **KPIs**: `Unique Users`, `Visits`, `Pageviews`, `Visit Duration`, `Citations`.
 * **Data Source**: Matomo (`VisitsSummary.get`).
-* **Example Services**: PlabiPD.
 * **Script** `source_type`:`matomo_site_summary`
 
-**3. Standalone Tools (API-driven KPIs)**
+**4. Standalone Tools (API-driven KPIs)**
 
 These are typically downloadable tools where usage is not measured by web traffic but by other means. The script measures their impact through publication citations and download counts retrieved from an external API.
 
@@ -49,7 +57,7 @@ These are typically downloadable tools where usage is not measured by web traffi
 * **Example Services**: Trimmomatic (downloads from GitHub API), MapMan (downloads from a tracked Matomo URL).
 * **Script** `source_type`:`github_release_downloads`,`matomo_download`.
 
-**4. Optional KPIs (Executions)**
+**5. Optional KPIs (Executions)**
 
 Any of the above service categories can additionally report an `Executions` KPI. This is useful for backend tools that generate output files or directories on a local server. The script can scan configured absolute paths to count these matching files/directories modified during the reporting month.
 
@@ -146,7 +154,7 @@ Adding a new service is a straightforward process of updating the `SERVICES_CONF
 
 **Step 1:Determine the Service Category**
 
-First, decide which of the three categories your new service falls into (see "Understanding Service Categories" above). This will determine the `source_type` and `source_details` you need to provide.
+First, decide which of the four categories your new service falls into (see "Understanding Service Categories" above). This will determine the `source_type` and `source_details` you need to provide.
 
 **Step 2: Update `SERVICES_CONFIG`**
 
@@ -164,6 +172,25 @@ Open the script and add a new dictionary entry to the `SERVICES_CONFIG` list usi
     "source_details": {"label": " Matomo Label for this Page"}
 },
 ```
+
+**Template for Multi-Page Service (Explicit URL List)**
+```python
+{
+    "display_name": "MyMultiPageService",
+    "scorpion_service_name": "MyMultiPageService - The Full Name in ScorPIoN",
+    "publications": [
+        {"title": "Title of the primary publication", "author_id": "...", "citation_id": "..."}
+    ],
+    "source_type": "matomo_page_url_list",
+    "source_details": {
+        "url_paths": [
+            "/my_page_one.html",
+            "/my_page_two.html"
+        ]
+    }
+},
+```
+`url_paths` are the page paths as shown in Matomo's "Pages" report (Page URL column), including the leading slash. List every page belonging to the service; metrics are summed across all of them. Pages with no data for the reporting month are skipped with a warning rather than failing the whole service.
 
 **Template for Full-Site Service**
 ```python
