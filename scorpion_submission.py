@@ -152,7 +152,7 @@ INTERMEDIATE_NAME_TO_SCORPION_KPI = {
     'Executions': 'Executions'
 }
 
-def _execute_matomo_curl(api_method: str, report_date: str, extra_params_str: str = "", as_list: bool = False):
+def _execute_matomo_curl(api_method: str, report_date: str, extra_params_str: str = "") -> dict | None:
     """Generic function to execute a Matomo API curl command."""
     url = (f"{MATOMO_BASE_URL}?module=API&method={api_method}"
            f"&idSite={SITE_ID}&period=month&date={report_date}&format=JSON{extra_params_str}")
@@ -163,15 +163,13 @@ def _execute_matomo_curl(api_method: str, report_date: str, extra_params_str: st
         result = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
         if not result.stdout:
             print(f"WARNING: Matomo API returned empty response for method {api_method}")
-            return [] if as_list else None
+            return None
         data = json.loads(result.stdout)
-        if as_list:
-            return data if isinstance(data, list) else []
         # Handle cases where Matomo returns a list (e.g., for page titles) vs. a direct dictionary (e.g., for summaries)
         return data[0] if isinstance(data, list) and data else data
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         print(f"ERROR during Matomo fetch for {api_method}: {e}")
-        return [] if as_list else None
+        return None
 
 def get_matomo_page_title_data(label: str, report_date: str) -> dict | None:
     """Fetches analytics data for a specific page title using curl."""
@@ -189,39 +187,34 @@ def get_matomo_summary_data(report_date: str) -> dict | None:
 
 def get_matomo_page_url_list_data(url_paths: list, report_date: str) -> dict | None:
     """
-    Fetches Actions.getPageUrls (flattened) and sums metrics across a fixed list of
-    page paths. Used for services whose usage spans several page URLs that do not
-    share a common folder or filename pattern Matomo could group by (e.g. PubPlant's
-    pages use unrelated legacy names like plant_genomes_pa.ep alongside pubplant_*.html),
+    Fetches Actions.getPageUrl for each configured page path and sums the metrics.
+    Used for services whose usage spans several page URLs that do not share a
+    common folder or filename pattern Matomo could group by (e.g. PubPlant's pages
+    use unrelated legacy names like plant_genomes_pa.ep alongside pubplant_*.html),
     so the pages have to be enumerated explicitly rather than matched by prefix.
+
+    Queries one page at a time (like get_matomo_download_data does for downloads)
+    rather than fetching the site's whole flattened page-URL report and filtering
+    client-side: that report can be very large for a busy site and risks a curl
+    timeout for no benefit when only a handful of pages are actually wanted.
     """
-    rows = _execute_matomo_curl("Actions.getPageUrls", report_date, extra_params_str="&flat=1", as_list=True)
-    if not rows:
+    total_hits = total_visits = total_uniq = weighted_time = 0
+    matched = 0
+    for path in url_paths:
+        encoded_path = quote(path)
+        row = _execute_matomo_curl("Actions.getPageUrl", report_date, extra_params_str=f"&pageUrl={encoded_path}")
+        if not row:
+            print(f"WARNING: No data for page URL '{path}' in {report_date}")
+            continue
+        matched += 1
+        total_hits += row.get("nb_hits", 0)
+        total_visits += row.get("nb_visits", 0)
+        total_uniq += row.get("sum_daily_nb_uniq_visitors", 0)
+        weighted_time += row.get("avg_time_on_page", 0) * row.get("nb_visits", 0)
+    if matched == 0:
+        print(f"WARNING: None of the configured page URLs had data for {report_date}: {url_paths}")
         return None
-    wanted = set(url_paths)
-
-    def row_path(row: dict) -> str:
-        # Matomo's flat page-URL report has been observed to return either the bare
-        # path or the full URL including domain, depending on instance/version.
-        url = row.get("url") or ""
-        for path in wanted:
-            if url == path or url.endswith(path):
-                return path
-        return f"/{row.get('label', '')}"
-
-    matches = [r for r in rows if row_path(r) in wanted]
-    if not matches:
-        print(f"WARNING: None of the configured page URLs were found in Matomo's report for {report_date}: {url_paths}")
-        return None
-    found_paths = {row_path(r) for r in matches}
-    missing = wanted - found_paths
-    if missing:
-        print(f"WARNING: {len(missing)} configured page URL(s) had no data for {report_date}: {sorted(missing)}")
-    total_hits = sum(r.get("nb_hits", 0) for r in matches)
-    total_visits = sum(r.get("nb_visits", 0) for r in matches)
-    total_uniq = sum(r.get("sum_daily_nb_uniq_visitors", 0) for r in matches)
-    weighted_time = sum(r.get("avg_time_on_page", 0) * r.get("nb_visits", 0) for r in matches)
-    print(f"INFO:   -> matched {len(matches)}/{len(url_paths)} configured page URLs.")
+    print(f"INFO:   -> matched {matched}/{len(url_paths)} configured page URLs.")
     return {
         "nb_hits": total_hits,
         "nb_visits": total_visits,
@@ -505,7 +498,7 @@ def main(user_date: str, is_live_run: bool, selected_services: list | None):
             if scorpion_kpi:
                 measurements_payload.append(create_measurement(scorpion_kpi, value, user_date))
                 # Special case: 'Actions' KPI is also submitted as 'Pageviews' for some services
-                if intermediate_name == 'Actions' and source_type in ['matomo_page_title', 'matomo_site_summary']:
+                if intermediate_name == 'Actions' and source_type in ['matomo_page_title', 'matomo_site_summary', 'matomo_page_url_list']:
                     measurements_payload.append(create_measurement('Pageviews', value, user_date))
 
         valid_measurements = [m for m in measurements_payload if m is not None]

@@ -36,7 +36,7 @@ These are services that exist as specific pages or sections within a larger Mato
 These are services whose usage spans several distinct page URLs that do not share a common Matomo page title, folder, or filename pattern the script could group by automatically. The pages are listed explicitly in the config and their metrics are summed.
 
 * **KPIs**: `Unique Users`, `Visits`, `Pageviews`, `Visit Duration`, `Citations`.
-* **Data Source**: Matomo (`Actions.getPageUrls`, flattened).
+* **Data Source**: Matomo (`Actions.getPageUrl`, one request per configured page).
 * **Example Services**: PlabiPD (PubPlant's pages use unrelated legacy names such as `pubplant_main.html` and `plant_genomes_pa.ep`, so they cannot be matched by a single title or prefix).
 * **Script** `source_type`: `matomo_page_url_list`
 
