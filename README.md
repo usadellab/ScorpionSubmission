@@ -77,6 +77,17 @@ This script requires several API tokens to function. Create a file named `.env` 
 * `SERPAPI_KEY`: An API key from https://serpapi.com/ to enable scraping of Google Scholar for citation counts.
 * `GITHUB_TOKEN`: A GitHub Personal Access Token. Recommended to avoid hitting the GitHub API's anonymous access rate limits.
 
+**Script-level configuration (top of `scorpion_submission.py`):**
+
+* `MATOMO_BASE_URL`: The base URL of your Matomo installation. Defaults to `https://www.plabipd.de/analytics/`.
+* `MATOMO_RESOLVE`: Optional DNS override for Matomo curl requests. Useful after a server migration where the public DNS record has not yet been updated to point to the new server. Set to a string in the format `"hostname:port:ip"` (passed directly to curl's `--resolve` flag), or `None` to use normal DNS resolution.
+
+  Example (override DNS to reach the new server at `10.100.50.34` while DNS still points to the old IP):
+  ```python
+  MATOMO_RESOLVE = "www.plabipd.de:443:10.100.50.34"
+  ```
+  Once the DNS record is updated, set this back to `None`.
+
 # Usage
 
 The script is controlled via command-line arguments.
